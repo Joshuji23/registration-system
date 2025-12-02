@@ -6,6 +6,7 @@ import lombok.Setter;
 
 @Setter
 @Getter
+
 @Entity
 @Table(name = "roles") // 在数据库建对应表
 public class Role {
