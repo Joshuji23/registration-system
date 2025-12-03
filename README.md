@@ -41,6 +41,36 @@
 - Spring Boot 4.0.0
 - Maven 4.0.0
 
+## 如何启动数据库配置，快速开始项目
+
+首先，大家尽量下载同一个版本的数据库，我这里使用的是PostgreSQL 18版本。但是版本不同也没事
+应该是不会出现什么问题的。因为我们用的都是一些比较基础的功能。
+
+下载好数据库之后，会有一个默认用户postgres，为这个用户设置密码123456。
+
+首先如果是之前安装的时候可以给用户输入密码，就输入。如果已经过了，那么就打开POWERSHELL，输入
+`psql -U postgres`回车登陆postgres之后直接
+
+```sql
+ALTER USER postgres WITH PASSWORD '123456';
+```
+
+然后创建一个名为`registration_system`的数据库
+
+```sql
+REATE DATABASE registration_system;
+```
+
+然后回到powershell下执行
+
+```powershell
+psql -U postgres -d registration_system -f "src/main/resources/db/init.sql"
+```
+
+就完成了数据库初始化。最后在你的idea中链接数据库就可以了。
+
+![idea数据库链接](./resources/img/idea数据库链接.png)
+
 # 实现效果
 
 > 最后希望实现的效果，在这里我稍微阐述下我的想法：（我觉得我们应该照着靶子射箭，也就是
@@ -65,49 +95,62 @@
 
 那么我们就需要有如下的一些数据库设计：
 
-CREATE TYPE gender_enum AS ENUM ('male', 'female');
+--- 
 
-patient_user // 患者
-
-```sql
-id SERIAL PRIMARY KEY,
-id_card VARCHAR(18) UNIQUE NOT NULL,
-name VARCHAR(100) NOT NULL,
-password VARCHAR(255) NOT NULL,
-phone_number VARCHAR(15) NOT NULL UNIQUE,
-age INT,
-gender gender_enum NOT NULL
-```
-
-doctor_user // 医生
+统一的用户表
 
 ```sql
-id SERIAL PRIMARY KEY,
-doctor_id VARCHAR(10) UNIQUE NOT NULL,
-name VARCHAR(100) NOT NULL,
-password VARCHAR(255) NOT NULL,
-age INT,
-gender gender_enum NOT NULL,
-title VARCHAR(100),
+CREATE TABLE app_user (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL,     -- 'PATIENT' / 'DOCTOR' / 'ADMIN'
+    created_at TIMESTAMP DEFAULT NOW()
+);
 ```
 
-department // 部门
+患者档案
 
 ```sql
-id SERIAL PRIMARY KEY,
-department_name VARCHAR(100) NOT NULL,
+CREATE TABLE patient_profile (
+    id SERIAL PRIMARY KEY,
+    user_id INT UNIQUE NOT NULL REFERENCES app_user(id),
+
+    id_card VARCHAR(18) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    phone_number VARCHAR(15) NOT NULL UNIQUE,
+    age INT,
+    gender gender_enum NOT NULL
+);
 ```
 
-admin_user // 管理员
+医生档案
 
 ```sql
-id SERIAL PRIMARY KEY,
+CREATE TABLE doctor_profile (
+    id SERIAL PRIMARY KEY,
+    user_id INT UNIQUE NOT NULL REFERENCES app_user(id),
 
-password VARCHAR(255) NOT NULL,
+    doctor_id VARCHAR(10) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    age INT,
+    gender gender_enum NOT NULL,
+    title VARCHAR(100),
+
+    department_id INT REFERENCES department(id)
+);
 ```
 
-为了详细时间这一块，我们应该将写一个时间槽，方便后续扩展
-time_slot // 时间槽
+科室表
+
+```sql
+CREATE TABLE department (
+    id SERIAL PRIMARY KEY,
+    department_name VARCHAR(100) NOT NULL
+);
+```
+
+时间槽
 
 ```sql
 CREATE TYPE time_slot AS ENUM (
@@ -116,42 +159,56 @@ CREATE TYPE time_slot AS ENUM (
 );
 ```
 
-patient_doctor_registration // 病人-医生-挂号时间表
+挂号表
 
 ```sql
-id SERIAL PRIMARY KEY,
-patient_user_id INT REFERENCES patient_user(id),
-doctor_user_id INT REFERENCES doctor_user(id),
-department_id INT REFERENCES department(id),
-weekday INT NOT NULL CHECK (weekday BETWEEN 1 AND 5)
-timeslot time_slot NOT NULL,
-registration_time TIMESTAMP NOT NULL DEFAULT NOW(),
-status VARCHAR(20) NOT NULL // PENDING/SUCCESS/CANCELLED/FINISHED
+CREATE TABLE patient_doctor_registration (
+    id SERIAL PRIMARY KEY,
+    patient_profile_id INT REFERENCES patient_profile(id),
+    doctor_profile_id INT REFERENCES doctor_profile(id),
+    department_id INT REFERENCES department(id),
+
+    weekday INT NOT NULL CHECK (weekday BETWEEN 1 AND 5),
+    timeslot time_slot NOT NULL,
+    registration_time TIMESTAMP NOT NULL DEFAULT NOW(),
+    status VARCHAR(20) NOT NULL
+);
 ```
 
-doctor_department_schedule // 医生-科室-排班表
+doctor_department_schedule // 医生-科室-排班表（科室值班表）
 
 ```sql
-id SERIAL PRIMARY KEY,
-doctor_user_id INT REFERENCES doctor_user(id),
-department_id INT REFERENCES department(id),
-weekday INT NOT NULL CHECK (weekday BETWEEN 1 AND 5)
-timeslot time_slot NOT NULL,
+CREATE TABLE doctor_department_schedule (
+    id SERIAL PRIMARY KEY,
+    doctor_profile_id INT REFERENCES doctor_profile(id),
+    department_id INT REFERENCES department(id),
+    weekday INT NOT NULL CHECK (weekday BETWEEN 1 AND 5),
+    timeslot time_slot NOT NULL,
 
-UNIQUE (doctor_user_id, weekday, timeslot)
+    UNIQUE (doctor_profile_id, weekday, timeslot)
+);
 ```
 
+---
+
+```
+关于医生科室表我并不打算设计，因为我设计的就是一个医生仅仅是一个科室的人
+作为拓展留下
 doctor_department // 医生-科室表
 
-```sql
+sql
 id SERIAL PRIMARY KEY,
 doctor_user_id INT REFERENCES doctor_user(id),
 department_id INT REFERENCES department(id),
 UNIQUE (doctor_user_id, department_id)
+
 ```
 
+---
+CREATE TYPE gender_enum AS ENUM ('male', 'female');
+
 ![ER图](./resources/img/ER图-test.png)
-请大家为我补充
+数据库结构应该是不会再改动的了，请同学帮助我修改一下ER图，谢谢！
 
 # 项目结构
 
@@ -177,3 +234,21 @@ UNIQUE (doctor_user_id, department_id)
 │         │         └── resources
 │                   └── application.properties
 ```
+
+# 最新进展
+
+我们实现了实体类，并且使用枚举类型规范类型。这里需要注意，因为我们这里使用的是枚举类型。所以数据库中的字符串值就应该是和枚举名一致才可以。
+
+- Role：PATIENT/DOCTOR/ADMIN（大写）
+- Gender：male/female（我按你的库定义，特意使用了小写枚举名，确保与 PostgreSQL gender_enum 一致）
+- TimeSlot：AM1…PM4（大写）
+
+按照最小分支来说entity分支到这里就应该结束了，但是我为了知道这个分支是可用的，所以这里会写一个登陆界面尝试验证。
+
+# todolist
+- [x]  init.sql
+- [x] 初始化，添加依赖
+- [x] 配置application.yml
+- [x] 实体类
+- 接口
+- 统一登陆
