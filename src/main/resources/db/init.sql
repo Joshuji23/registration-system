@@ -106,6 +106,30 @@ CREATE TABLE doctor_department_schedule (
                                             UNIQUE (doctor_profile_id, weekday, timeslot)
 );
 
+-- ===============================
+-- Table: disease_type
+-- ===============================
+CREATE TABLE IF NOT EXISTS disease_type (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    code VARCHAR(50) UNIQUE,
+    department_id INTEGER REFERENCES department(id) ON DELETE SET NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ========================================
+-- doctor_disease_type
+-- ========================================
+CREATE TABLE IF NOT EXISTS doctor_disease_type (
+    id SERIAL PRIMARY KEY,
+    doctor_id INTEGER NOT NULL REFERENCES doctor_profile(id) ON DELETE CASCADE,
+    disease_type_id INTEGER NOT NULL REFERENCES disease_type(id) ON DELETE CASCADE,
+
+    UNIQUE (doctor_id, disease_type_id)
+);
+
 -- ==========================================
 -- Insert Example Data
 -- ==========================================
